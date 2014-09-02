@@ -47,6 +47,9 @@
 import argparse
 import os
 import glob
+import fnmatch
+import exiftool
+import sys
 
 parser = argparse.ArgumentParser(description='Dig files with exif data.')
 
@@ -56,7 +59,7 @@ group.add_argument('-q', '--quiet', help="Do not print anything", action="store_
 
 parser.add_argument('-s','--source', help='Source path', required=True)
 parser.add_argument('-d','--destination', help='Destination path', required=True)
-parser.add_argument('-m','--mode', help='Transfer method', required=True)
+parser.add_argument('-m','--mode', help='Transfer method', required=False)
 
 args = parser.parse_args()
 print
@@ -71,17 +74,47 @@ if args.verbose:
     print "Destination path:     {}".format(os.path.abspath(args.destination))
     print
 
-# Find all files using glob. Glob with joined asterix on the path will skip
-# files starting with dot
-def FindAllFiles(source):
-    scan_path = os.path.join(source,'*')
+# Recursive glob
+# Source: http://stackoverflow.com/questions/2186525/use-a-glob-to-find-files-recursively-in-python
+def recursive_glob(treeroot, pattern):
+  results = []
+  if args.verbose:
+    print "Starting os.walk..."
+  for base, dirs, files in os.walk(treeroot):
+    goodfiles = fnmatch.filter(files, pattern)
+    results.extend(os.path.join(base, f) for f in goodfiles)
+  return results
+
+# Get files EXIF metadata
+def get_exif_metadata(f):
+    with exiftool.ExifTool() as et:
+        metadata = et.get_metadata(f)
+   
     if args.verbose:
-        print "Scanning files:   {}".format(scan_path)
-    return glob.glob(scan_path)
-
+        print
+        
+        print "Proccessing file: {}".format(f)
+        if metadata.has_key('SourceFile'):
+            print("SourceFile: {}".format(metadata["SourceFile"]))        
+        if metadata.has_key('EXIF:DateTimeOriginal'):
+            print("DateTimeOriginal: {:20.20}".format(metadata["EXIF:DateTimeOriginal"]))
+        if metadata.has_key('File:MIMEType'):
+            print("MIME Type: {}".format(metadata["File:MIMEType"]))
+        print
+    
+    return metadata
+     
 # Main
-AllFiles = []
-AllFiles = FindAllFiles(os.path.abspath(args.source))
-print AllFiles
 
+# Get all Files
+AllFiles = []
+print "Getting list of all files in path {}".format(os.path.abspath(args.source))
+AllFiles = recursive_glob(os.path.abspath(args.source),'*')
+if args.verbose:
+    print "Number of files found: {}".format(len(AllFiles))
+print
+
+# Get all files metadata
+for f in AllFiles:
+    print get_exif_metadata(f)
 
